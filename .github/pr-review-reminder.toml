@@ -6,8 +6,8 @@ exclude_users = [
   "dependabot[bot]",
 ]
 
-# Only include PRs where at least one of these people is involved as a requested
-# reviewer or as the person who should act next. Leave empty [] to include all PRs.
+# Only remind about PRs that involve someone on this list (author, requested
+# reviewer, or person who should act). Leave empty [] for all open PRs in the repo.
 team_reviewers = [
   "Wojciech-Rebisz",
   # Add more GitHub nicknames below:

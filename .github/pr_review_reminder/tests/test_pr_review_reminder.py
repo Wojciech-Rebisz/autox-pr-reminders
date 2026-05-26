@@ -69,6 +69,34 @@ def test_determine_action_changes_requested() -> None:
     assert actors == ("alice",)
 
 
+def test_determine_action_human_review_comment_for_author() -> None:
+    action, actors = determine_action(
+        author="alice",
+        reviews=[
+            {
+                "state": "COMMENTED",
+                "submitted_at": "2026-05-26T11:00:00Z",
+                "user": {"login": "bob"},
+            },
+            {
+                "state": "COMMENTED",
+                "submitted_at": "2026-05-26T12:00:00Z",
+                "user": {"login": "coderabbitai[bot]"},
+            },
+        ],
+        requested_users=["carol"],
+        requested_teams=[],
+    )
+    assert action == "author (review comment from bob)"
+    assert actors == ("alice",)
+
+
+def test_format_actor_only_mentions_toml_entries() -> None:
+    slack_map = {"alice": "U111"}
+    assert format_actor("alice", slack_map) == "<@U111>"
+    assert format_actor("bob", slack_map) == "`bob`"
+
+
 def test_needs_review_false_when_approved() -> None:
     assert not needs_review(
         author="alice",

@@ -47,7 +47,7 @@ Edit **[`.github/pr-review-reminder.toml`](../../pr-review-reminder.toml)** — 
 | Key | Purpose |
 |-----|---------|
 | `exclude_users` | GitHub nicknames: skip PR when they are the **author**, or when **all** requested reviewers are on this list |
-| `team_reviewers` | GitHub nicknames: only PRs involving at least one of these people (requested reviewer or person who should act). Empty `[]` = no team filter |
+| `team_reviewers` | Only PRs where someone on this list is the **author**, a **requested reviewer**, or **should act next**. Empty `[]` = all qualifying PRs in the repo |
 | `[slack_mentions]` | `github_login = "SLACK_MEMBER_ID"` for `<@mentions>` in Slack |
 
 Example:
@@ -64,7 +64,19 @@ team_reviewers = [
 your-github-username = "U012ABCDEF"
 ```
 
-In Slack messages, **only team members** from `team_reviewers` are shown next to “reviewers” (others on the PR are ignored). Optional env `PR_REVIEW_GITHUB_SLACK_MAP` overrides `slack_mentions` for the same logins.
+Slack messages list **everyone who should act** (requested reviewers, author after `CHANGES_REQUESTED`, or author when a **human** left a `COMMENTED` review). Only logins in `[slack_mentions]` become Slack `<@mentions>`; everyone else is shown as `` `github-login` ``.
+
+**Preview without posting to Slack:**
+
+```bash
+cd .github
+export PR_REVIEW_GITHUB_TOKEN=...
+export PR_REVIEW_REPOSITORIES=opendatahub-io/pipelines-components
+PYTHONPATH=. python3 -m pr_review_reminder.pr_review_reminder \
+  --config pr-review-reminder.toml --idle-hours 0 --dry-run
+```
+
+The command prints JSON and a `--- Slack preview ---` block (same text the channel would receive).
 
 ## Setup (maintainers)
 
@@ -95,8 +107,6 @@ Optional repository **variable** (not secret):
 3. Run **Actions → PR review Slack reminder → Run workflow** (manual runs are always dry-run: log only).
 4. Open the job log and confirm the JSON payload lists the expected PRs.
 5. Run **PR review Slack reminder (post to Slack)** to send a real message; attach log/screenshot to the ticket.
-
-If dispatch fails with HTTP 500, run **Actions smoke test** first to confirm Actions are enabled for the repo.
 
 ### 4. Production schedule
 

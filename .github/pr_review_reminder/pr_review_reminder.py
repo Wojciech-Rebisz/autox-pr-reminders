@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .config import ReminderConfig, merge_slack_maps, normalize_login, resolve_config_path
-from .filters import filter_actors, should_include_pull_request
+from .filters import should_include_pull_request
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +163,30 @@ def latest_meaningful_review(reviews: list[dict[str, Any]]) -> dict[str, Any] | 
     return max(meaningful, key=lambda r: r.get("submitted_at") or r.get("created_at") or "")
 
 
+def is_bot_login(login: str) -> bool:
+    """Return True for GitHub App / bot accounts."""
+    lower = login.lower()
+    return lower.endswith("[bot]") or lower.endswith("-bot") or login == "github-actions[bot]"
+
+
+def latest_human_comment_review(reviews: list[dict[str, Any]], author: str) -> dict[str, Any] | None:
+    """Return the latest COMMENTED review from a human reviewer (not the PR author)."""
+    author_key = normalize_login(author)
+    comments: list[dict[str, Any]] = []
+    for review in reviews:
+        if review.get("state") != "COMMENTED":
+            continue
+        login = (review.get("user") or {}).get("login", "")
+        if not login or normalize_login(login) == author_key:
+            continue
+        if is_bot_login(login):
+            continue
+        comments.append(review)
+    if not comments:
+        return None
+    return max(comments, key=lambda r: r.get("submitted_at") or r.get("created_at") or "")
+
+
 def determine_action(
     *,
     author: str,
@@ -174,6 +198,11 @@ def determine_action(
     latest = latest_meaningful_review(reviews)
     if latest and latest.get("state") == "CHANGES_REQUESTED":
         return "author (address review feedback)", (author,)
+
+    comment_review = latest_human_comment_review(reviews, author)
+    if comment_review:
+        reviewer = (comment_review.get("user") or {}).get("login", "reviewer")
+        return f"author (review comment from {reviewer})", (author,)
 
     actors: list[str] = list(requested_users)
     if actors:
@@ -281,10 +310,8 @@ def collect_reminders(
             ):
                 continue
 
-            actors = filter_actors(actors, config)
-            if not actors and action == "reviewers":
-                continue
-
+            # Show everyone who should act (per issue). team_reviewers only scopes
+            # which PRs are included above, not which names appear in the message.
             reminders.append(
                 PullRequestReminder(
                     repository=repo,
@@ -303,11 +330,30 @@ def collect_reminders(
 
 
 def format_actor(login: str, slack_map: dict[str, str]) -> str:
-    """Format a GitHub login as a Slack mention or monospace fallback."""
+    """Format a GitHub login: ``<@id>`` only when listed in slack_mentions, else ``login``."""
     slack_id = slack_map.get(normalize_login(login))
     if slack_id:
         return f"<@{slack_id}>"
     return f"`{login}`"
+
+
+def format_actors(actors: tuple[str, ...], slack_map: dict[str, str]) -> str:
+    """Join actor logins for Slack; @mentions only for entries in slack_mentions."""
+    if not actors:
+        return "_unassigned_"
+    return ", ".join(format_actor(actor, slack_map) for actor in actors)
+
+
+def _format_action_suffix(
+    action: str,
+    actors: tuple[str, ...],
+    author: str,
+    slack_map: dict[str, str],
+) -> str:
+    """Format who should act; omit duplicate author ping when they are the only actor."""
+    if action.startswith("author") and len(actors) == 1 and normalize_login(actors[0]) == normalize_login(author):
+        return f"*{action}*"
+    return f"*{action}*: {format_actors(actors, slack_map)}"
 
 
 def format_idle(hours: float) -> str:
@@ -334,18 +380,18 @@ def build_slack_payload(reminders: list[PullRequestReminder], slack_map: dict[st
             ],
         }
 
-    lines: list[str] = [f":eyes: *PR review reminder* — {len(reminders)} PR(s) need attention\n"]
+    lines: list[str] = [f":pr-open-1: *PR review reminder* — {len(reminders)} PR(s) need attention\n"]
     current_repo: str | None = None
     for item in reminders:
         if item.repository != current_repo:
             current_repo = item.repository
             lines.append(f"\n*{current_repo}*")
-        actor_text = ", ".join(format_actor(actor, slack_map) for actor in item.actors) or "_unassigned_"
+        action_suffix = _format_action_suffix(item.action, item.actors, item.author, slack_map)
         lines.append(
             f"• <{item.url}|#{item.number} {item.title}> — "
             f"author {format_actor(item.author, slack_map)} — "
             f"idle {format_idle(item.idle_hours)} — "
-            f"*{item.action}*: {actor_text}"
+            f"{action_suffix}"
         )
 
     body = "\n".join(lines)
@@ -461,6 +507,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dry_run or args.skip_slack:
         print(json.dumps(payload, indent=2))
+        preview = ""
+        for block in payload.get("blocks", []):
+            if block.get("type") == "section":
+                preview = (block.get("text") or {}).get("text", "")
+                break
+        if preview:
+            print("\n--- Slack preview ---\n")
+            print(preview)
         if args.dry_run:
             logger.info("Dry run complete (%d reminder(s))", len(reminders))
         return 0

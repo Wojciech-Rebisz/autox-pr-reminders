@@ -36,6 +36,17 @@ def test_team_filter_requires_team_member() -> None:
     )
 
 
+def test_team_filter_includes_authors_pr_waiting_on_external_reviewer() -> None:
+    """Author on team: PR awaiting review from someone outside team still counts."""
+    config = load_config_json_for_tests({"team_reviewers": ["alice"]})
+    assert should_include_pull_request(
+        author="alice",
+        requested_users=["outsider"],
+        actors=("outsider",),
+        config=config,
+    )
+
+
 def test_filter_actors_keeps_team_only() -> None:
     config = load_config_json_for_tests(
         {
