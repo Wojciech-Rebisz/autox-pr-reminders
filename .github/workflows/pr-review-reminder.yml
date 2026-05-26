@@ -12,8 +12,11 @@ on:
     inputs:
       dry_run:
         description: Print Slack payload without posting (recommended for first test)
-        type: boolean
-        default: true
+        type: choice
+        options:
+          - "yes"
+          - "no"
+        default: "yes"
 
 concurrency:
   group: pr-review-reminder
@@ -21,7 +24,7 @@ concurrency:
 
 jobs:
   remind:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
@@ -43,7 +46,7 @@ jobs:
           PR_REVIEW_GITHUB_SLACK_MAP: ${{ vars.PR_REVIEW_GITHUB_SLACK_MAP }}
         run: |
           args=(--config .github/pr-review-reminder.toml)
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "yes" ]]; then
             args+=(--dry-run)
           fi
           PYTHONPATH="$GITHUB_WORKSPACE/.github" \
