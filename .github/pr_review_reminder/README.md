@@ -92,9 +92,11 @@ Optional repository **variable** (not secret):
 
 1. Merge `.github/workflows/pr-review-reminder.yml` and this script.
 2. Add secrets (and `PR_REVIEW_REPOSITORIES` if scanning repos other than the workflow host).
-3. Run **Actions → PR review Slack reminder → Run workflow** → **dry_run: yes** (log only, no Slack post).
+3. Run **Actions → PR review Slack reminder → Run workflow** (manual runs are always dry-run: log only).
 4. Open the job log and confirm the JSON payload lists the expected PRs.
-5. Re-run with dry run **disabled** against a test channel; attach log/screenshot to the ticket.
+5. Run **PR review Slack reminder (post to Slack)** to send a real message; attach log/screenshot to the ticket.
+
+If dispatch fails with HTTP 500, run **Actions smoke test** first to confirm Actions are enabled for the repo.
 
 ### 4. Production schedule
 
