@@ -1,0 +1,50 @@
+---
+# Scheduled Slack reminders for open PRs awaiting review.
+# Configure repo list, Slack channel, and secrets — see .github/pr_review_reminder/README.md.
+# See .github/pr_review_reminder/README.md for setup and maintainer runbook.
+name: PR review Slack reminder
+
+on:
+  schedule:
+    # Weekdays once at 09:00 GMT+2 (07:00 UTC). GitHub cron is UTC-only.
+    - cron: "0 7 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print Slack payload without posting (recommended for first test)
+        type: boolean
+        default: true
+
+concurrency:
+  group: pr-review-reminder
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Send PR review reminders
+        env:
+          # PAT with read access to every repo in PR_REVIEW_REPOSITORIES (if set).
+          PR_REVIEW_GITHUB_TOKEN: ${{ secrets.PR_REVIEW_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          # Comma-separated owner/repo. Empty = scan only the repo where this workflow runs.
+          PR_REVIEW_REPOSITORIES: ${{ vars.PR_REVIEW_REPOSITORIES }}
+          PR_REVIEW_IDLE_HOURS: "24"
+          PR_REVIEW_IGNORE_LABELS: "no-reminder,wip"
+          PR_REVIEW_GITHUB_SLACK_MAP: ${{ vars.PR_REVIEW_GITHUB_SLACK_MAP }}
+        run: |
+          args=(--config .github/pr-review-reminder.toml)
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          PYTHONPATH="$GITHUB_WORKSPACE/.github" \
+            python3 -m pr_review_reminder.pr_review_reminder "${args[@]}"

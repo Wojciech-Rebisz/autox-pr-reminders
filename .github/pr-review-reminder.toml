@@ -1,0 +1,19 @@
+# PR review reminder — edit GitHub nicknames here (see README in
+# .github/pr_review_reminder/README.md).
+
+# Skip reminders when the PR author is one of these accounts.
+exclude_users = [
+  "dependabot[bot]",
+]
+
+# Only include PRs where at least one of these people is involved as a requested
+# reviewer or as the person who should act next. Leave empty [] to include all PRs.
+team_reviewers = [
+  "Wojciech-Rebisz",
+  # Add more GitHub nicknames below:
+  # "teammate-github-username",
+]
+
+# Optional Slack @mentions: GitHub login -> Slack member ID (Slack profile → ⋮ → Copy member ID).
+[slack_mentions]
+Wojciech-Rebisz = "U0A6FMVQA90"
