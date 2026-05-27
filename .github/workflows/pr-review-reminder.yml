@@ -5,8 +5,11 @@ name: PR review Slack reminder
 on:
   schedule:
     # Weekdays 07:20 UTC (09:20 CEST / UTC+2). GitHub cron is UTC-only.
-    - cron: "20 7 * * 1-5"
+    - cron: "20 0 * * 1-5"
   workflow_dispatch:
+  # Fallback when GitHub never queues `schedule`.
+  repository_dispatch:
+    types: [pr-review-reminder]
 
 jobs:
   remind:
