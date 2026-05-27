@@ -2,7 +2,7 @@
 
 Scheduled GitHub Action that posts open pull requests needing attention to a Slack channel (AutoX / `pipelines-components` and other configured repos). Each qualifying PR is sent as its own message so the team can discuss it in a thread.
 
-**Schedule:** weekdays at **07:00 UTC** (09:00 CEST in summer) — see `cron` in [`.github/workflows/pr-review-reminder.yml`](../workflows/pr-review-reminder.yml).
+**Schedule:** weekdays at **07:20 UTC** (09:20 CEST in summer) — see `cron` in [`.github/workflows/pr-review-reminder.yml`](../workflows/pr-review-reminder.yml).
 
 **Configuration:** [`.github/pr-review-reminder.toml`](../pr-review-reminder.toml) — team filter, Slack @mentions, optional per-repo emoji (`[repo_icons]`).
 
