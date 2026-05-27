@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -14,7 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .config import ReminderConfig, merge_slack_maps, normalize_login, resolve_config_path
+from .config import ReminderConfig, merge_slack_maps, normalize_login, repo_icon_for, resolve_config_path
 from .filters import should_include_pull_request
 
 logger = logging.getLogger(__name__)
@@ -403,16 +404,17 @@ def format_reviewer_list(
     return ", ".join(parts) if parts else "_none requested_"
 
 
-def format_pr_detail_lines(item: PullRequestReminder, slack_map: dict[str, str]) -> list[str]:
-    """Build Author / Reviewer / optional Status lines for one pull request."""
+def format_pr_message_text(item: PullRequestReminder, slack_map: dict[str, str], *, config: ReminderConfig) -> str:
+    """Build mrkdwn body for a single pull request (one Slack message)."""
     lines = [
-        f"• <{item.url}|#{item.number} {item.title}> — idle {format_idle(item.idle_hours)}",
+        f"{repo_icon_for(item.repository, config)} *{item.repository}*",
+        f"<{item.url}|#{item.number} {item.title}> — idle {format_idle(item.idle_hours)}",
         f"Author: {format_actor(item.author, slack_map)}",
         f"Reviewer: {format_reviewer_list(item.reviewers, item.reviewer_teams, slack_map)}",
     ]
     if item.action != "reviewers":
         lines.append(f"Status: *{item.action}*")
-    return lines
+    return "\n".join(lines)
 
 
 def format_idle(hours: float) -> str:
@@ -423,36 +425,50 @@ def format_idle(hours: float) -> str:
     return f"{days:.1f}d"
 
 
-def build_slack_payload(reminders: list[PullRequestReminder], slack_map: dict[str, str]) -> dict[str, Any]:
-    """Build a Slack incoming-webhook payload for the reminder list."""
-    if not reminders:
-        return {
-            "text": "No pull requests need review reminders right now.",
-            "blocks": [
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": ":white_check_mark: No open PRs need review reminders right now.",
-                    },
-                }
-            ],
-        }
-
-    lines: list[str] = [f":pr-open-1: *PR review reminder* — {len(reminders)} PR(s) need attention\n"]
-    current_repo: str | None = None
-    for item in reminders:
-        if item.repository != current_repo:
-            current_repo = item.repository
-            lines.append(f"\n*{current_repo}*")
-        lines.extend(format_pr_detail_lines(item, slack_map))
-        lines.append("")
-
-    body = "\n".join(lines)
+def build_slack_payload_for_pr(
+    item: PullRequestReminder,
+    slack_map: dict[str, str],
+    config: ReminderConfig,
+) -> dict[str, Any]:
+    """Build one Slack incoming-webhook payload for a single pull request."""
+    body = format_pr_message_text(item, slack_map, config=config)
     return {
-        "text": f"PR review reminder: {len(reminders)} PR(s)",
+        "text": f"#{item.number} {item.title}",
         "blocks": [{"type": "section", "text": {"type": "mrkdwn", "text": body[:3000]}}],
     }
+
+
+def build_slack_payloads(
+    reminders: list[PullRequestReminder],
+    slack_map: dict[str, str],
+    config: ReminderConfig,
+) -> list[dict[str, Any]]:
+    """Build one Slack payload per PR so each can have its own thread."""
+    if not reminders:
+        return [
+            {
+                "text": "No pull requests need review reminders right now.",
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": ":white_check_mark: No open PRs need review reminders right now.",
+                        },
+                    }
+                ],
+            }
+        ]
+    return [build_slack_payload_for_pr(item, slack_map, config) for item in reminders]
+
+
+def build_slack_payload(
+    reminders: list[PullRequestReminder],
+    slack_map: dict[str, str],
+    config: ReminderConfig,
+) -> dict[str, Any]:
+    """Backward-compatible single payload (first message only). Prefer ``build_slack_payloads``."""
+    return build_slack_payloads(reminders, slack_map, config)[0]
 
 
 def post_slack_webhook(webhook_url: str, payload: dict[str, Any]) -> None:
@@ -467,6 +483,14 @@ def post_slack_webhook(webhook_url: str, payload: dict[str, Any]) -> None:
     with urllib.request.urlopen(request, timeout=30) as response:
         if response.status >= 300:
             raise RuntimeError(f"Slack webhook returned HTTP {response.status}")
+
+
+def post_slack_payloads(webhook_url: str, payloads: list[dict[str, Any]]) -> None:
+    """Post each payload as a separate channel message (one thread root per PR)."""
+    for index, payload in enumerate(payloads):
+        if index > 0:
+            time.sleep(0.3)
+        post_slack_webhook(webhook_url, payload)
 
 
 def resolve_repositories(raw: str | None, default_repo: str) -> list[str]:
@@ -557,20 +581,21 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     slack_map = merge_slack_maps(config, parse_github_slack_map(args.github_slack_map))
-    payload = build_slack_payload(reminders, slack_map)
+    payloads = build_slack_payloads(reminders, slack_map, config)
 
     if args.dry_run or args.skip_slack:
-        print(json.dumps(payload, indent=2))
-        preview = ""
-        for block in payload.get("blocks", []):
-            if block.get("type") == "section":
-                preview = (block.get("text") or {}).get("text", "")
-                break
-        if preview:
-            print("\n--- Slack preview ---\n")
-            print(preview)
+        for index, payload in enumerate(payloads, start=1):
+            print(json.dumps(payload, indent=2))
+            preview = ""
+            for block in payload.get("blocks", []):
+                if block.get("type") == "section":
+                    preview = (block.get("text") or {}).get("text", "")
+                    break
+            if preview:
+                print(f"\n--- Slack preview ({index}/{len(payloads)}) ---\n")
+                print(preview)
         if args.dry_run:
-            logger.info("Dry run complete (%d reminder(s))", len(reminders))
+            logger.info("Dry run complete (%d PR(s), %d message(s))", len(reminders), len(payloads))
         return 0
 
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "")
@@ -579,12 +604,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        post_slack_webhook(webhook_url, payload)
+        post_slack_payloads(webhook_url, payloads)
     except Exception:
         logger.exception("Failed to post Slack reminder")
         return 1
 
-    logger.info("Posted reminder for %d PR(s)", len(reminders))
+    logger.info("Posted %d Slack message(s) for %d PR(s)", len(payloads), len(reminders))
     return 0
 
 

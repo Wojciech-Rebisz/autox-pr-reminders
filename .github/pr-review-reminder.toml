@@ -17,3 +17,10 @@ team_reviewers = [
 # Optional Slack @mentions: GitHub login -> Slack member ID (Slack profile → ⋮ → Copy member ID).
 [slack_mentions]
 Wojciech-Rebisz = "U0A6FMVQA90"
+
+# Slack emoji per repository (name without colons). Unlisted repos use default_repo_icon.
+default_repo_icon = "pr-open-1"
+
+[repo_icons]
+"opendatahub-io/pipelines-components" = "pr-open-1"
+"red-hat-data-services/pipelines-components" = "downstream_pr"

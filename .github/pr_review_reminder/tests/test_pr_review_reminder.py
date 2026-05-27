@@ -9,7 +9,7 @@ import pytest
 
 from ..pr_review_reminder import (
     PullRequestReminder,
-    build_slack_payload,
+    build_slack_payloads,
     determine_action,
     format_actor,
     has_ignore_label,
@@ -117,7 +117,7 @@ def test_format_actor_uses_slack_map() -> None:
     assert format_actor("bob", {}) == "`bob`"
 
 
-def test_build_slack_payload_groups_by_repo() -> None:
+def test_build_slack_payloads_one_message_per_pr() -> None:
     reminders = [
         PullRequestReminder(
             repository=_REPO_A,
@@ -142,14 +142,22 @@ def test_build_slack_payload_groups_by_repo() -> None:
             reviewers=("dan",),
         ),
     ]
-    payload = build_slack_payload(reminders, {"alice": "U1"})
-    text = payload["blocks"][0]["text"]["text"]
-    assert _REPO_A in text
-    assert _REPO_B in text
-    assert "#1 Add feature" in text
-    assert "Author: <@U1>" in text
-    assert "Reviewer: `bob`" in text
-    assert ":pr-open-1:" in text
+    from ..config import load_config_json_for_tests
+
+    config = load_config_json_for_tests(
+        {
+            "default_repo_icon": "pr-open-1",
+            "repo_icons": {_REPO_B: "downstream_pr"},
+        }
+    )
+    payloads = build_slack_payloads(reminders, {"alice": "U1"}, config)
+    assert len(payloads) == 2
+    assert ":pr-open-1:" in payloads[0]["blocks"][0]["text"]["text"]
+    assert ":downstream_pr:" in payloads[1]["blocks"][0]["text"]["text"]
+    assert _REPO_A in payloads[0]["blocks"][0]["text"]["text"]
+    assert _REPO_B in payloads[1]["blocks"][0]["text"]["text"]
+    assert "Author: <@U1>" in payloads[0]["blocks"][0]["text"]["text"]
+    assert "Reviewer: `bob`" in payloads[0]["blocks"][0]["text"]["text"]
 
 
 def test_human_logins_skips_bots() -> None:
