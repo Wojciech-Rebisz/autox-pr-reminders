@@ -4,8 +4,8 @@ name: PR review Slack reminder
 
 on:
   schedule:
-    # Weekdays 07:20 UTC (09:20 CEST / UTC+2). GitHub cron is UTC-only.
-    - cron: "20 0 * * 1-5"
+    # Weekdays 10:45 UTC (12:45 CEST / UTC+2). GitHub cron is UTC-only.
+    - cron: "45 10 * * 1-5"
   workflow_dispatch:
   # Fallback when GitHub never queues `schedule`.
   repository_dispatch:
@@ -27,7 +27,7 @@ jobs:
           PR_REVIEW_GITHUB_TOKEN: ${{ secrets.PR_REVIEW_GITHUB_TOKEN }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           PR_REVIEW_REPOSITORIES: ${{ vars.PR_REVIEW_REPOSITORIES }}
-          PR_REVIEW_IDLE_HOURS: "24"
+          PR_REVIEW_IDLE_HOURS: "0"
           PR_REVIEW_IGNORE_LABELS: "no-reminder,wip"
           PR_REVIEW_GITHUB_SLACK_MAP: ${{ vars.PR_REVIEW_GITHUB_SLACK_MAP }}
         run: |
