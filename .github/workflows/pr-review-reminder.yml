@@ -1,14 +1,12 @@
 ---
-# Scheduled Slack reminders for open PRs awaiting review.
-# See .github/pr_review_reminder/README.md for setup and maintainer runbook.
+# Posts PR review reminders to Slack on schedule and on manual dispatch.
 name: PR review Slack reminder
 
 on:
   schedule:
-    # Weekdays once at 09:00 GMT+2 (07:00 UTC). GitHub cron is UTC-only.
+    # Weekdays 07:00 UTC (09:00 CET / GMT+2). GitHub cron is UTC-only.
     - cron: "0 7 * * 1-5"
   workflow_dispatch:
-    # No inputs — GitHub dispatch API/UI can return HTTP 500 with boolean/choice inputs.
 
 jobs:
   remind:
@@ -30,10 +28,6 @@ jobs:
           PR_REVIEW_IGNORE_LABELS: "no-reminder,wip"
           PR_REVIEW_GITHUB_SLACK_MAP: ${{ vars.PR_REVIEW_GITHUB_SLACK_MAP }}
         run: |
-          args=(--config .github/pr-review-reminder.toml)
-          # Manual runs from the UI/CLI are always dry-run (log only, no Slack post).
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            args+=(--dry-run)
-          fi
           PYTHONPATH="$GITHUB_WORKSPACE/.github" \
-            python3 -m pr_review_reminder.pr_review_reminder "${args[@]}"
+            python3 -m pr_review_reminder.pr_review_reminder \
+              --config .github/pr-review-reminder.toml

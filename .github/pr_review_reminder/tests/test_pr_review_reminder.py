@@ -128,6 +128,7 @@ def test_build_slack_payload_groups_by_repo() -> None:
             idle_hours=30,
             action="reviewers",
             actors=("bob",),
+            reviewers=("bob",),
         ),
         PullRequestReminder(
             repository=_REPO_B,
@@ -138,13 +139,43 @@ def test_build_slack_payload_groups_by_repo() -> None:
             idle_hours=50,
             action="reviewers",
             actors=("dan",),
+            reviewers=("dan",),
         ),
     ]
-    payload = build_slack_payload(reminders, {})
+    payload = build_slack_payload(reminders, {"alice": "U1"})
     text = payload["blocks"][0]["text"]["text"]
     assert _REPO_A in text
     assert _REPO_B in text
     assert "#1 Add feature" in text
+    assert "Author: <@U1>" in text
+    assert "Reviewer: `bob`" in text
+    assert ":pr-open-1:" in text
+
+
+def test_human_logins_skips_bots() -> None:
+    from ..pr_review_reminder import human_logins
+
+    assert human_logins(["alice", "coderabbitai[bot]", "hbelmiro"]) == ("alice", "hbelmiro")
+
+
+def test_collect_pr_reviewers_includes_commenters() -> None:
+    from ..pr_review_reminder import collect_pr_reviewers
+
+    reviewers = collect_pr_reviewers(
+        author="alice",
+        requested_users=["VaniHaripriya"],
+        reviews=[
+            {
+                "state": "COMMENTED",
+                "user": {"login": "hbelmiro"},
+            },
+            {
+                "state": "COMMENTED",
+                "user": {"login": "coderabbitai[bot]"},
+            },
+        ],
+    )
+    assert reviewers == ("VaniHaripriya", "hbelmiro")
 
 
 def test_parse_github_slack_map() -> None:

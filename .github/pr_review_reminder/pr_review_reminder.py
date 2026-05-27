@@ -36,6 +36,8 @@ class PullRequestReminder:
     idle_hours: float
     action: str
     actors: tuple[str, ...]
+    reviewers: tuple[str, ...] = ()
+    reviewer_teams: tuple[str, ...] = ()
 
 
 class GitHubApiError(Exception):
@@ -167,6 +169,53 @@ def is_bot_login(login: str) -> bool:
     """Return True for GitHub App / bot accounts."""
     lower = login.lower()
     return lower.endswith("[bot]") or lower.endswith("-bot") or login == "github-actions[bot]"
+
+
+def human_logins(logins: list[str]) -> tuple[str, ...]:
+    """Drop bot accounts from a list of GitHub logins."""
+    return tuple(login for login in logins if login and not is_bot_login(login))
+
+
+def team_slugs(teams: list[dict[str, Any]]) -> tuple[str, ...]:
+    """Extract team slugs from the requested-reviewers API payload."""
+    return tuple(team.get("slug", team.get("name", "team")) for team in teams)
+
+
+_REVIEW_STATES_FOR_PARTICIPANTS = frozenset(
+    {"COMMENTED", "CHANGES_REQUESTED", "APPROVED", "DISMISSED"}
+)
+
+
+def collect_pr_reviewers(
+    *,
+    author: str,
+    requested_users: list[str],
+    reviews: list[dict[str, Any]],
+) -> tuple[str, ...]:
+    """Merge requested reviewers with humans who submitted a review (no bots, not author)."""
+    author_key = normalize_login(author)
+    seen: set[str] = set()
+    ordered: list[str] = []
+
+    def add(login: str) -> None:
+        if not login or is_bot_login(login):
+            return
+        key = normalize_login(login)
+        if key == author_key or key in seen:
+            return
+        seen.add(key)
+        ordered.append(login)
+
+    for login in requested_users:
+        add(login)
+
+    for review in reviews:
+        if review.get("state") not in _REVIEW_STATES_FOR_PARTICIPANTS:
+            continue
+        login = (review.get("user") or {}).get("login", "")
+        add(login)
+
+    return tuple(ordered)
 
 
 def latest_human_comment_review(reviews: list[dict[str, Any]], author: str) -> dict[str, Any] | None:
@@ -322,6 +371,12 @@ def collect_reminders(
                     idle_hours=hours,
                     action=action,
                     actors=actors,
+                    reviewers=collect_pr_reviewers(
+                        author=author,
+                        requested_users=requested_users,
+                        reviews=reviews,
+                    ),
+                    reviewer_teams=team_slugs(requested_teams),
                 )
             )
 
@@ -337,23 +392,27 @@ def format_actor(login: str, slack_map: dict[str, str]) -> str:
     return f"`{login}`"
 
 
-def format_actors(actors: tuple[str, ...], slack_map: dict[str, str]) -> str:
-    """Join actor logins for Slack; @mentions only for entries in slack_mentions."""
-    if not actors:
-        return "_unassigned_"
-    return ", ".join(format_actor(actor, slack_map) for actor in actors)
-
-
-def _format_action_suffix(
-    action: str,
-    actors: tuple[str, ...],
-    author: str,
+def format_reviewer_list(
+    reviewers: tuple[str, ...],
+    reviewer_teams: tuple[str, ...],
     slack_map: dict[str, str],
 ) -> str:
-    """Format who should act; omit duplicate author ping when they are the only actor."""
-    if action.startswith("author") and len(actors) == 1 and normalize_login(actors[0]) == normalize_login(author):
-        return f"*{action}*"
-    return f"*{action}*: {format_actors(actors, slack_map)}"
+    """Format requested reviewers (humans + teams); @mentions only from slack_map."""
+    parts = [format_actor(login, slack_map) for login in reviewers]
+    parts.extend(f"`{slug}`" for slug in reviewer_teams)
+    return ", ".join(parts) if parts else "_none requested_"
+
+
+def format_pr_detail_lines(item: PullRequestReminder, slack_map: dict[str, str]) -> list[str]:
+    """Build Author / Reviewer / optional Status lines for one pull request."""
+    lines = [
+        f"• <{item.url}|#{item.number} {item.title}> — idle {format_idle(item.idle_hours)}",
+        f"Author: {format_actor(item.author, slack_map)}",
+        f"Reviewer: {format_reviewer_list(item.reviewers, item.reviewer_teams, slack_map)}",
+    ]
+    if item.action != "reviewers":
+        lines.append(f"Status: *{item.action}*")
+    return lines
 
 
 def format_idle(hours: float) -> str:
@@ -386,13 +445,8 @@ def build_slack_payload(reminders: list[PullRequestReminder], slack_map: dict[st
         if item.repository != current_repo:
             current_repo = item.repository
             lines.append(f"\n*{current_repo}*")
-        action_suffix = _format_action_suffix(item.action, item.actors, item.author, slack_map)
-        lines.append(
-            f"• <{item.url}|#{item.number} {item.title}> — "
-            f"author {format_actor(item.author, slack_map)} — "
-            f"idle {format_idle(item.idle_hours)} — "
-            f"{action_suffix}"
-        )
+        lines.extend(format_pr_detail_lines(item, slack_map))
+        lines.append("")
 
     body = "\n".join(lines)
     return {
