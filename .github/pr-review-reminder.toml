@@ -10,13 +10,13 @@ exclude_users = [
 # reviewer, or person who should act). Leave empty [] for all open PRs in the repo.
 team_reviewers = [
   "Wojciech-Rebisz",
-  # Add more GitHub nicknames below:
-  # "teammate-github-username",
+  "Mateusz-Switala",
 ]
 
 # Optional Slack @mentions: GitHub login -> Slack member ID (Slack profile → ⋮ → Copy member ID).
 [slack_mentions]
 Wojciech-Rebisz = "U0A6FMVQA90"
+Mateusz-Switala = "U0A6EHZDBFG"
 
 # Slack emoji per repository (name without colons). Unlisted repos use default_repo_icon.
 default_repo_icon = "pr-open-1"
