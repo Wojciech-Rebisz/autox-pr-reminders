@@ -13,6 +13,14 @@ team_reviewers = [
   "Mateusz-Switala",
   "DorotaDR",
   "MichalSteczko",
+  "filip-komarzyniec",
+  "jakub-walaszczyk",
+  "ZabinskiMichal",
+  "MRGuziX",
+  "piotrhm",
+  "Medokins",
+  "LukaszCmielowski",
+  "dryszka",
 ]
 
 # Optional Slack @mentions: GitHub login -> Slack member ID (Slack profile → ⋮ → Copy member ID).
@@ -21,6 +29,14 @@ Wojciech-Rebisz = "U0A6FMVQA90"
 Mateusz-Switala = "U0A6EHZDBFG"
 DorotaDR = "U0A6C6F07CM"
 MichalSteczko = "U0A6VG523U1"
+filip-komarzyniec = "U0A62DH1QVD"
+jakub-walaszczyk = "U0A6CSEFA5T"
+ZabinskiMichal = "U0A75S3J28H"
+MRGuziX = "U0A7AS5NLJC"
+piotrhm = "U0A60FZ11E3"
+Medokins = "U0A6PQVR6KF"
+LukaszCmielowski = "U0A6A5QU5FD"
+dryszka = "U0A5ZKK3CHM"
 
 # Slack emoji per repository (name without colons). Unlisted repos use default_repo_icon.
 default_repo_icon = "pr-open-1"
