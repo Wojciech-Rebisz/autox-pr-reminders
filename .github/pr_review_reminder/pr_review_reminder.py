@@ -385,6 +385,16 @@ def collect_reminders(
     return reminders
 
 
+def escape_slack_mrkdwn(text: str) -> str:
+    """Escape ``&``, ``<``, and ``>`` so they are not parsed as Slack mrkdwn control chars."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def escape_slack_link_label(text: str) -> str:
+    """Escape mrkdwn control chars and ``|`` (link label delimiter in ``<url|label>``)."""
+    return escape_slack_mrkdwn(text).replace("|", "¦")
+
+
 def format_actor(login: str, slack_map: dict[str, str]) -> str:
     """Format a GitHub login: ``<@id>`` only when listed in slack_mentions, else ``login``."""
     slack_id = slack_map.get(normalize_login(login))
@@ -408,7 +418,7 @@ def format_pr_message_text(item: PullRequestReminder, slack_map: dict[str, str],
     """Build mrkdwn body for a single pull request (one Slack message)."""
     lines = [
         f"{repo_icon_for(item.repository, config)} *{item.repository}*",
-        f"<{item.url}|#{item.number} {item.title}> — idle {format_idle(item.idle_hours)}",
+        f"<{item.url}|#{item.number} {escape_slack_link_label(item.title)}> — idle {format_idle(item.idle_hours)}",
         f"Author: {format_actor(item.author, slack_map)}",
         f"Reviewer: {format_reviewer_list(item.reviewers, item.reviewer_teams, slack_map)}",
     ]

@@ -11,7 +11,9 @@ from ..pr_review_reminder import (
     PullRequestReminder,
     build_slack_payloads,
     determine_action,
+    escape_slack_link_label,
     format_actor,
+    format_pr_message_text,
     has_ignore_label,
     idle_hours,
     is_snoozed,
@@ -89,6 +91,35 @@ def test_determine_action_human_review_comment_for_author() -> None:
     )
     assert action == "author (review comment from bob)"
     assert actors == ("alice",)
+
+
+def test_escape_slack_link_label() -> None:
+    assert escape_slack_link_label("UPSTREAM<carry>: chore") == "UPSTREAM&lt;carry&gt;: chore"
+    assert escape_slack_link_label("a|b") == "a¦b"
+    assert escape_slack_link_label("foo & bar") == "foo &amp; bar"
+
+
+def test_format_pr_message_text_escapes_angle_brackets_in_title() -> None:
+    from ..config import load_config_json_for_tests
+
+    config = load_config_json_for_tests({"default_repo_icon": "pr-open-1"})
+    item = PullRequestReminder(
+        repository=_REPO_A,
+        number=75,
+        title="UPSTREAM<carry>: chore: Add platform-specific flag",
+        url=f"https://github.com/{_REPO_A}/pull/75",
+        author="alice",
+        idle_hours=20,
+        action="reviewers",
+        actors=("bob",),
+        reviewers=("bob",),
+    )
+    text = format_pr_message_text(item, {}, config=config)
+    assert (
+        f"<https://github.com/{_REPO_A}/pull/75|#75 UPSTREAM&lt;carry&gt;: chore: Add platform-specific flag>"
+        in text
+    )
+    assert "<carry>" not in text
 
 
 def test_format_actor_only_mentions_toml_entries() -> None:
